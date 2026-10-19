@@ -1,0 +1,53 @@
+# =====================================================================
+#  Nginx config for the BACKEND EC2 instances
+#
+#  Nginx listens on port 80 and forwards /api/* to Node.js on 127.0.0.1:5000.
+#
+#  WHY put Nginx in front of Node.js?
+#   - Node.js is NOT exposed directly: the security group opens only port 80,
+#     port 5000 is reachable only from inside the instance (via Nginx)
+#   - Nginx handles slow clients, timeouts, request size limits, gzip
+#   - One standard place for access logs: /var/log/nginx/access.log
+#   - Later you can add rate limiting, caching or TLS here without touching app code
+#
+#  Values filled in by envsubst:
+#    ${API_UPSTREAM}  -> 127.0.0.1:5000 on EC2, api:5000 in Docker
+#    ${DNS_RESOLVER}  -> 169.254.169.253 on AWS, 127.0.0.11 in Docker
+# =====================================================================
+server {
+    listen 80 default_server;
+    server_name _;
+
+    client_max_body_size 1m;
+    gzip on;
+    gzip_types application/json;
+
+    resolver ${DNS_RESOLVER} valid=30s ipv6=off;
+    set $api_upstream "${API_UPSTREAM}";
+
+    add_header X-Backend-Nginx $hostname always;
+
+    location /api/ {
+        proxy_pass http://$api_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 3s;
+        proxy_read_timeout    30s;
+    }
+
+    # Checks Nginx only (not Node, not MongoDB) - handy while debugging
+    location = /nginx-health {
+        access_log off;
+        default_type text/plain;
+        return 200 "nginx ok\n";
+    }
+
+    # This server only serves the API
+    location / {
+        default_type application/json;
+        return 404 '{"error":"backend serves /api/* only"}';
+    }
+}

@@ -1,0 +1,55 @@
+# =====================================================================
+#  Run the WHOLE app on your laptop with the same shape as on AWS:
+#
+#   browser :8080 -> frontend (Nginx) -> backend-nginx (Nginx) -> api (Node) -> mongo
+#
+#   docker compose up -d --build        then open http://localhost:8080
+#   docker compose up -d --scale api=3  run 3 API containers (load balancing demo)
+#   docker compose down                 stop everything (add -v to delete DB data)
+#
+#  Uses a local MongoDB container by default. To use MongoDB Atlas instead,
+#  create a .env file next to this file with:  MONGO_URI=mongodb+srv://...
+# =====================================================================
+services:
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+
+  api:
+    build: ./backend
+    environment:
+      PORT: "5000"
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/taskboard}
+      APP_ENV: docker
+      ENABLE_STRESS: "true"
+    depends_on:
+      - mongo
+
+  backend-nginx:
+    image: nginx:1.27-alpine
+    environment:
+      API_UPSTREAM: api:5000
+      DNS_RESOLVER: 127.0.0.11       # Docker's internal DNS
+    volumes:
+      - ./nginx/backend.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      - api
+
+  frontend:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    environment:
+      BACKEND_HOST: backend-nginx
+      DNS_RESOLVER: 127.0.0.11
+    volumes:
+      - ./frontend:/var/www/taskboard:ro
+      - ./nginx/frontend.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./deploy/docker/write-meta-docker.sh:/write-meta.sh:ro
+    command: ["sh", "-c", "sh /write-meta.sh && exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
+    depends_on:
+      - backend-nginx
+
+volumes:
+  mongo-data:

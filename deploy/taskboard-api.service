@@ -1,0 +1,26 @@
+# systemd unit (BACKEND instances): keeps the Node.js API running
+#
+# WHY systemd and not just "node server.js"?
+#  - starts the app automatically when the instance boots. This is essential:
+#    instances launched by the Auto Scaling Group must work with nobody logging in
+#  - restarts the app if it crashes
+#  - logs go to the journal:  sudo journalctl -u taskboard-api -f
+#
+# Install:  sudo cp deploy/taskboard-api.service /etc/systemd/system/
+#           sudo systemctl daemon-reload && sudo systemctl enable --now taskboard-api
+[Unit]
+Description=DevOps Task Board - Node.js API
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/taskboard/backend
+EnvironmentFile=/opt/taskboard/backend/.env
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

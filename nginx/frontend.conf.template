@@ -1,0 +1,71 @@
+# =====================================================================
+#  Nginx config for the FRONTEND EC2 instances
+#
+#  Nginx does 2 jobs here:
+#   1. Web server     : serves index.html, style.css, app.js from /var/www/taskboard
+#   2. Reverse proxy  : forwards every /api/* request to the backend
+#                       (backend private IP in phase 1, Backend ALB DNS later)
+#
+#  Values in ${...} are filled in by `envsubst` (EC2 user data / Docker):
+#    ${BACKEND_HOST}  -> <BACKEND_PRIVATE_IP>  or  <BACKEND_ALB_DNS>
+#    ${DNS_RESOLVER}  -> 169.254.169.253 on AWS (Amazon DNS), 127.0.0.11 in Docker
+# =====================================================================
+server {
+    listen 80 default_server;
+    server_name _;
+
+    root  /var/www/taskboard;
+    index index.html;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json;
+
+    # WHY a resolver + variable?
+    # An ALB's IP addresses CHANGE over time. If proxy_pass used the DNS name
+    # directly, Nginx would resolve it once at startup and keep the old IPs forever
+    # -> random 502 errors days later. With a resolver and a variable, Nginx
+    # re-resolves the name every 30 seconds.
+    resolver ${DNS_RESOLVER} valid=30s ipv6=off;
+    set $backend_host "${BACKEND_HOST}";
+
+    # Teaching headers (visible in browser DevTools -> Network -> Response headers)
+    add_header X-Frontend-Nginx $hostname always;         # which frontend server answered
+    add_header X-FE-ALB $http_x_amzn_trace_id always;     # set only if the request came through an ALB
+
+    # Health check for the Frontend ALB target group (cheap, no backend call)
+    location = /health {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # "Who am I" file, regenerated at every boot by taskboard-meta.service
+    location = /instance.json {
+        alias /var/www/meta/instance.json;
+        default_type application/json;
+        expires -1;
+    }
+
+    # Reverse proxy: browser calls /api/... on THIS server, Nginx forwards it.
+    # The browser never needs to know where the backend lives -> no CORS issues,
+    # and the backend can stay in a private network.
+    location /api/ {
+        proxy_pass http://$backend_host;
+        proxy_http_version 1.1;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout    30s;
+
+        # add_header inside a location replaces the server-level ones, so repeat them
+        add_header X-Frontend-Nginx $hostname always;
+        add_header X-FE-ALB $http_x_amzn_trace_id always;
+        add_header X-Backend-Target $backend_host always;  # where Nginx sent this request
+    }
+
+    # Everything else = static files (fallback to index.html)
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

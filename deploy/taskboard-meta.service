@@ -1,0 +1,16 @@
+# systemd unit (FRONTEND instances): regenerate /var/www/meta/instance.json at boot
+# Install:  sudo cp deploy/taskboard-meta.service /etc/systemd/system/
+#           sudo systemctl daemon-reload && sudo systemctl enable --now taskboard-meta
+[Unit]
+Description=DevOps Task Board - write instance metadata for the UI
+Wants=network-online.target
+After=network-online.target
+Before=nginx.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/taskboard/deploy/write-instance-meta.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

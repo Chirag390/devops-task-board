@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevOps Task Board</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">&#9638;</span>
+      <div>
+        <h1>DevOps Task Board</h1>
+        <p class="sub">Frontend &harr; Backend &harr; MongoDB on EC2, ALB &amp; Auto Scaling</p>
+      </div>
+    </div>
+    <div class="pills">
+      <span class="pill" id="envPill">env: -</span>
+      <span class="pill" id="dbPill">db: checking</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- 1. Request path -->
+    <section class="card">
+      <h2>How this page reached you</h2>
+      <ol class="flow" id="flow">
+        <li data-k="browser">Browser</li>
+        <li data-k="fealb">Frontend ALB</li>
+        <li data-k="fenginx">Nginx<br /><small>frontend EC2</small></li>
+        <li data-k="bealb">Backend ALB</li>
+        <li data-k="benginx">Nginx<br /><small>backend EC2</small></li>
+        <li data-k="node">Node.js API<br /><small>:5000</small></li>
+        <li data-k="mongo">MongoDB<br /><small>Atlas</small></li>
+      </ol>
+      <p class="hint" id="flowHint">Detecting environment...</p>
+    </section>
+
+    <!-- 2. Which servers answered -->
+    <section class="grid2">
+      <div class="card instance">
+        <div class="card-head"><h2>Frontend served by</h2><span class="tag fe">FRONTEND</span></div>
+        <dl id="feInfo"><dt>Instance</dt><dd>-</dd></dl>
+      </div>
+      <div class="card instance">
+        <div class="card-head"><h2>Backend answered by</h2><span class="tag be">BACKEND</span></div>
+        <dl id="beInfo"><dt>Instance</dt><dd>-</dd></dl>
+      </div>
+    </section>
+    <div class="row-right"><button class="btn ghost" id="refreshInfo">&#8635; Refresh (hit the load balancers again)</button></div>
+
+    <!-- 3. Tasks -->
+    <section class="card">
+      <div class="card-head">
+        <h2>Learning tasks <small class="muted">stored in MongoDB</small></h2>
+        <span class="muted" id="taskCount"></span>
+      </div>
+      <form id="taskForm" class="task-form" autocomplete="off">
+        <input id="taskTitle" type="text" maxlength="120" placeholder="e.g. Create an AMI of the backend server" required />
+        <select id="taskTag"></select>
+        <button class="btn" type="submit">Add task</button>
+      </form>
+      <p class="error" id="taskError" hidden></p>
+      <ul class="tasks" id="taskList"></ul>
+      <p class="hint">Each task shows which backend instance created it. All backends share one database, so every task is visible no matter which backend answers. That is why the backend can scale out.</p>
+    </section>
+
+    <!-- 4. Live load balancing view -->
+    <section class="card">
+      <div class="card-head">
+        <h2>Live load-balancing view</h2>
+        <div class="controls">
+          <label class="muted">every
+            <select id="lbInterval">
+              <option value="300">0.3 s</option>
+              <option value="1000" selected>1 s</option>
+              <option value="3000">3 s</option>
+            </select>
+          </label>
+          <button class="btn" id="lbToggle">Start</button>
+          <button class="btn ghost" id="lbReset">Reset</button>
+        </div>
+      </div>
+      <p class="hint">Sends a request to the frontend and the backend again and again, and counts which instance answered.
+        When Auto Scaling launches a new instance, it appears here with a <span class="new">NEW</span> badge. That shows it registered with the load balancer on its own.</p>
+      <div class="grid2">
+        <div>
+          <h3>Frontend instances <span class="muted" id="feTotal"></span></h3>
+          <table class="lb"><thead><tr><th>Instance</th><th>AZ</th><th>Hits</th><th>Share</th><th>Last seen</th></tr></thead><tbody id="feTable"><tr><td colspan="5" class="muted">Press Start</td></tr></tbody></table>
+        </div>
+        <div>
+          <h3>Backend instances <span class="muted" id="beTotal"></span></h3>
+          <table class="lb"><thead><tr><th>Instance</th><th>AZ</th><th>Hits</th><th>Share</th><th>Last seen</th></tr></thead><tbody id="beTable"><tr><td colspan="5" class="muted">Press Start</td></tr></tbody></table>
+        </div>
+      </div>
+      <p class="muted small" id="lbErrors"></p>
+    </section>
+
+    <!-- 5. Auto scaling demo -->
+    <section class="card">
+      <div class="card-head"><h2>Auto Scaling demo: generate CPU load</h2><span class="tag warn">DEMO</span></div>
+      <p class="hint">Pushes backend CPU to about 100% for the chosen time. The ASG target-tracking policy (CPU &gt; 50%) then launches extra backend instances.
+        Several requests are sent so the load spreads across all current backends. Keep the live view running to watch new instances join.</p>
+      <div class="controls">
+        <label class="muted">Duration
+          <select id="stressSecs">
+            <option value="180">3 min</option>
+            <option value="300" selected>5 min</option>
+            <option value="480">8 min</option>
+          </select>
+        </label>
+        <label class="muted">Requests
+          <select id="stressReqs">
+            <option value="4">4</option>
+            <option value="8" selected>8</option>
+            <option value="16">16</option>
+          </select>
+        </label>
+        <button class="btn warn" id="stressBtn">Generate CPU load</button>
+      </div>
+      <ul class="stress" id="stressOut"></ul>
+    </section>
+  </main>
+
+  <footer>DevOps Task Board &middot; sample app for the "Frontend + Backend on EC2 with ALB &amp; ASG" lab</footer>
+  <script src="app.js"></script>
+</body>
+</html>
